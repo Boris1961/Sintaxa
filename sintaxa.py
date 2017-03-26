@@ -89,21 +89,20 @@ def multiply(m):
 def exec_modus(lexis):
     position = 0
     while position < len(lexis)-1: # проход по всем лексемам
-        flag_modus_found = False
+        flag_modus_found = True
         for modus in lexis_modus: # проход по всенм модусам
             if position >= len(modus[0]) or not isinstance(lexis[0], modus[0][0]): # если модус явно не годится
                 continue
             ipos = 1
-            ilexis = lexis
-            while ipos < len(modus[0])-1: # проход по шаблону модуса
-                if not isinstance(ilexis[position+ipos], modus[0][position+ipos]): # если лексема [position+ipos] не явл. инстантом соотв. класса модуса, те не годится
-                    lexeme = exec_modus(ilexis[position+ipos:])
-                    if not lexeme: break
-                    flag_modus_found = True
-                    ilexis = ilexis[:position+ipos] + [lexeme] + ilexis[position+len(lexeme.childs):]
-                    ipos += 1
-            if ipos == len(modus[0])-1:
-                lexis = ilexis
+            while ipos < len(modus[0]): # проход по шаблону модуса
+                if not isinstance(lexis[position+ipos], modus[0][position+ipos]): # если лексема [position+ipos] не явл. инстантом соотв. класса модуса, те не годится
+                    lexeme = exec_modus(lexis[position+ipos:])
+                    if not lexeme:
+                        flag_modus_found = False
+                        break
+                    lexis = lexis[:position] + [lexeme] + lexis[position+len(lexeme.childs):]
+                ipos += 1
+            if ipos == len(modus[0]): # модус найден
                 position += 1
                 break
         if not flag_modus_found:
@@ -154,11 +153,12 @@ syntax_modus = [
 lexis_list = []
 
 # exp_str = '(23+19)*dsds/asss1**8-8.9**8'
-exp_str = '(17*dsds)/(asss1**8-8.9**8)'
+exp_str = 'A*(B+C)'
 
 reg = reduce(lambda a,b: a+'|'+b, [(r'(?P<%s>%s)' % (x[0].__name__,x[1])) for x in syntax_modus ])
 result = re.sub(reg, multiply, exp_str)
 print([(m.name,m.value) for m in lexis_list])
 
-if not parse_syntax(0): print('Syntax error')
+exec_modus(lexis_list)
+# if not parse_syntax(0): print('Syntax error')
 print('\n{}\n{}'.format(exp_str,''.join([m.value for m in lexis_list])))
