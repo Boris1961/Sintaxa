@@ -2,10 +2,12 @@
 
 
 from functools import reduce
+from itertools import zip_longest
 import re
 
 
-
+class Class_EOL(object):
+    pass
 
 class SintaxObject(object):
     def __init__(self, value):
@@ -69,15 +71,15 @@ class Lexema(object):
 def symbol_class(sym):
     pass
 
-def get_lexis_modus(lst):
-    pass
-
-
-def match(ipos):
-    """
-    Ищем в списке syntax_modus правило, соответсвующее syntax_list[position:ipos]
-    """
-    return
+def modus_match(modus,lexis):
+    if len(lexis) < len(modus[0]):
+        return None
+    else:
+        lst = [isinstance(*t) for t in zip_longest(lexis, modus[0])]
+        if lst.count(False) == 0:
+            return len(lst)-1
+        else:
+            return lst.index(False)
 
 def multiply(m):
     lexis_list.append(eval('{}("{}")'.format(m.lastgroup,m.group())))
@@ -86,57 +88,24 @@ def multiply(m):
             sret = x[2] if len(x) == 3 else '<%s>' % m.lastgroup
     return sret
 
-def exec_modus(lexis):
-    position = 0
-    while position < len(lexis)-1: # проход по всем лексемам
-        flag_modus_found = True
-        for modus in lexis_modus: # проход по всенм модусам
-            if position >= len(modus[0]) or not isinstance(lexis[0], modus[0][0]): # если модус явно не годится
-                continue
-            ipos = 1
-            while ipos < len(modus[0]): # проход по шаблону модуса
-                if not isinstance(lexis[position+ipos], modus[0][position+ipos]): # если лексема [position+ipos] не явл. инстантом соотв. класса модуса, те не годится
-                    lexeme = exec_modus(lexis[position+ipos:])
-                    if not lexeme:
-                        flag_modus_found = False
-                        break
-                    lexis = lexis[:position] + [lexeme] + lexis[position+len(lexeme.childs):]
-                ipos += 1
-            if ipos == len(modus[0]): # модус найден
-                position += 1
-                break
-        if not flag_modus_found:
-            obj = modus[1]('node')
-            obj.childs = lexis[position: position + ipos]
-            return obj
+def get_lexis_modus(lst):
+    ml = [m for m in lexis_modus if len(m[0]) <= len(lst)]
+    mlist = [ (m, [isinstance(*n) for n in zip_longest(lst, m[0])] ) for m in ml ]
+    print(mlist)
+    return mlist
 
-
-                # if reduce(lambda a,b: a&b, [isinstance(lexis_list[pos], modus[0][pos]) for pos in range(len(modus)-1)]):
-
-
-def parse_syntax(position):
-    for modus in lexis_modus:
-        if len(lexis_list[position:]) < len(modus[0]) or not isinstance(lexis_list[position], modus[0][0]):
-            continue
-        last_pos = 1
-        while last_pos < len(modus[0]):
-            if not isinstance(lexis_list[position+last_pos], modus[0][last_pos]):
-                if not parse_syntax(position+last_pos-1):
-                    break
-            last_pos += 1
-        if last_pos == len(modus[0]):
-            obj = modus[1]('node')
-            obj.childs = lexis_list[position: position+last_pos]
-            tail = [obj] + lexis_list[position+last_pos:]
-            while len(lexis_list)>position: lexis_list.pop()
-            lexis_list.extend(tail)
-            # parse_syntax(position)
-            return True
-    return False
+def modus_match(modus,lexis):
+    if len(lexis) < len(modus[0]):
+        return 0
+    else:
+        lst = [isinstance(*t) for t in zip_longest(lexis[:len(modus[0])], modus[0], fillvalue = object)]
+        if lst.count(False) == 0:
+            return -1
+        else:
+            return lst.index(False)
 
 lexis_modus = [([QuoteLeft,Expression,QuoteRight],Expression),
-                ([Expression, OperInfix, Expression],Expression)
-              ]
+                ([Expression, OperInfix, Expression],Expression) ]
 syntax_modus = [
     (String, r'(?:".*")|(?:\'.*\')'),
     (IntNumber, r'\d+(?![\.])'),
@@ -150,15 +119,49 @@ syntax_modus = [
     (Sub, r'\-', '/'),
     (Add, r'\+', '+' )
 ]
+
+def exec_modus(lexis):
+    print("\nВход: \n", lexis)
+    while len(lexis) > 1: # проход по всем лексемам
+        second_break = False
+        modus_found = False
+        for modus in lexis_modus: # проход по всенм модусам
+            ipos = modus_match(modus,lexis)
+            if ipos == 0:   # модус явно не годится
+                continue    # давай следующий
+            if ipos == -1:  # модус совпал полностью
+                modus_target = modus[1]('Expression')
+                modus_target.childs = lexis[:len(modus[0])]
+                lexis = [modus_target] + lexis[len(modus[0]):]
+                modus_found = True
+                # if len(lexis) > 1: # lexis не отсканирован весь
+                #    break
+                return lexis
+            for i in range(ipos,0,-1):
+                lst = exec_modus(lexis[i:])
+                if lst:
+                    lexis = lexis[:i] + lst
+                    if len(lexis) == 1:  # lexis отсканирован весь
+                        return lexis
+                    modus_found = True
+                    second_break = True
+                    break
+            if second_break:
+                break
+        if not modus_found:
+            return None
+    return lexis
+
 lexis_list = []
 
 # exp_str = '(23+19)*dsds/asss1**8-8.9**8'
-exp_str = 'A*(B+C)'
+# exp_str = 'A*(B+C)'
+exp_str = '(A-X)*(B+C)'
 
 reg = reduce(lambda a,b: a+'|'+b, [(r'(?P<%s>%s)' % (x[0].__name__,x[1])) for x in syntax_modus ])
 result = re.sub(reg, multiply, exp_str)
 print([(m.name,m.value) for m in lexis_list])
 
-exec_modus(lexis_list)
+lexis_result = exec_modus(lexis_list)
 # if not parse_syntax(0): print('Syntax error')
-print('\n{}\n{}'.format(exp_str,''.join([m.value for m in lexis_list])))
+print('\n{}\n{}'.format(exp_str,''.join([m.value for m in lexis_result])))
