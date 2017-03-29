@@ -94,18 +94,8 @@ def get_lexis_modus(lst):
     print(mlist)
     return mlist
 
-def modus_match(modus,lexis):
-    if len(lexis) < len(modus[0]):
-        return 0
-    else:
-        lst = [isinstance(*t) for t in zip_longest(lexis[:len(modus[0])], modus[0], fillvalue = object)]
-        if lst.count(False) == 0:
-            return -1
-        else:
-            return lst.index(False)
-
-lexis_modus = [([QuoteLeft,Expression,QuoteRight],Expression),
-                ([Expression, OperInfix, Expression],Expression) ]
+lexis_modus = [((QuoteLeft,Expression,QuoteRight), Expression),
+                ((Expression, OperInfix, Expression), Expression)]
 syntax_modus = [
     (String, r'(?:".*")|(?:\'.*\')'),
     (IntNumber, r'\d+(?![\.])'),
@@ -120,7 +110,17 @@ syntax_modus = [
     (Add, r'\+', '+' )
 ]
 
-def exec_modus(lexis):
+def modus_match(modus,lexis):
+    if len(lexis) < len(modus[0]):
+        return 0
+    else:
+        lst = [isinstance(*t) for t in zip_longest(lexis[:len(modus[0])], modus[0], fillvalue = object)]
+        if lst.count(False) == 0:
+            return -1
+        else:
+            return lst.index(False)
+
+def exec_modus(lexis, depth=0):
     print("\nВход: \n", lexis)
     while len(lexis) > 1: # проход по всем лексемам
         second_break = False
@@ -134,11 +134,13 @@ def exec_modus(lexis):
                 modus_target.childs = lexis[:len(modus[0])]
                 lexis = [modus_target] + lexis[len(modus[0]):]
                 modus_found = True
-                # if len(lexis) > 1: # lexis не отсканирован весь
-                #    break
+                if depth:
+                    return lexis
+                else:
+                    break
                 return lexis
             for i in range(ipos,0,-1):
-                lst = exec_modus(lexis[i:])
+                lst = exec_modus(lexis[i:], depth=depth+1)
                 if lst:
                     lexis = lexis[:i] + lst
                     if len(lexis) == 1:  # lexis отсканирован весь
@@ -156,7 +158,10 @@ lexis_list = []
 
 # exp_str = '(23+19)*dsds/asss1**8-8.9**8'
 # exp_str = 'A*(B+C)'
-exp_str = '(A-X)*(B+C)'
+# exp_str = '(A-X)*(B+C)'
+# exp_str = 'A*(B+C)'
+
+exp_str = '((A-X)*12)**(B/(C-7))'
 
 reg = reduce(lambda a,b: a+'|'+b, [(r'(?P<%s>%s)' % (x[0].__name__,x[1])) for x in syntax_modus ])
 result = re.sub(reg, multiply, exp_str)
