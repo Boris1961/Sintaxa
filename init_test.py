@@ -18,13 +18,13 @@ SyntaxDict = dict(Operation=dict(_attrs_=dict(pseudo='<Opr>'),
                     QuoteLeft=dict(_attrs_=dict(syntax_modus=r'\(', pseudo='(' )
                                    ),
                     Expression=dict(_attrs_=dict(pseudo='<Exp>'),
-                                    Variable=dict(_attrs_=dict(syntax_modus=r'\w+(?:\d|\w)*', pseudo='Var')
+                                    Variable=dict(_attrs_=dict(syntax_modus=r'\w+(?:\d|\w)*', pseudo='<Var>')
                                                   ),
                                     Number=dict(_attrs_=dict(pseudo='<Num>'),
-                                                IntNumber=dict(_attrs_=dict(syntax_modus=r'\d+(?![\.])', pseudo='Int')),
-                                                FloatNumber=dict(_attrs_=dict(syntax_modus=r'\d+\.\d*', pseudo='Flo'))
+                                                IntNumber=dict(_attrs_=dict(syntax_modus=r'\d+(?![\.])', pseudo='<Int>')),
+                                                FloatNumber=dict(_attrs_=dict(syntax_modus=r'\d+\.\d*', pseudo='<Flo>'))
                                                 ),
-                                    String=dict(_attrs_=dict(syntax_modus=r'(?:".*")|(?:\'.*\')', pseudo='Str'))
+                                    String=dict(_attrs_=dict(syntax_modus=r'(?:".*")|(?:\'.*\')', pseudo='<Str>'))
                                     )
                     )
 
@@ -36,52 +36,39 @@ LexisModus = {'(<Exp>)' : '<Exp>', '<Exp><Infix><Exp>' : '<Exp>'}
 class Syn():
     def __init__(self, syntax_dict, lexis_moduses):
         class SyntaxClass(object):
+            pseudo = 'SynCl'
             def __init__(self, value):
                 self.name = self.__class__.__name__
                 self.value = value
         setattr(self, 'SyntaxClass', SyntaxClass)
         self.syntax_moduses = []
+        self.syntax_list = []
         Syn.recurse(self,syntax_dict,SyntaxClass)
         self.lexis_moduses = []
         reg = reduce(lambda a, b: '{}|{}'.format(a, b),
-                     [(r'(?P<{}>{})'.format(x[0],x[1])) for x in self.syntax_moduses])
-        def multiply(m):
-            src.append(m.group())
-            for x in syntax_modus:
-                if x[0].__name__ == m.lastgroup:
-                    sret = x[2] if len(x) == 3 else m.lastgroup
-            return sret
+                 [(r'(?P<{}>{})'.format(x.__name__, re.sub(r'[^0-9a-zA-Z]', lambda m: '\{}'.format(m.group()), x.pseudo) )) for x in self.syntax_moduses])
         for (mkey,mval) in lexis_moduses.items():
-            src = []
-            result = re.sub(reg, lambda m: src.append(m.group()), mkey)
-            self.lexis_moduses.append([src,mval])
-        pass
-
-        """
-        def multiply(m):
-            self.lexis_modus.append(eval('{}("{}")'.format(m.lastgroup, m.group())))
-            for x in syntax_modus:
-                if x[0].__name__ == m.lastgroup:
-                    sret = x[2] if len(x) == 3 else m.lastgroup
-            return sret
-        result = re.sub(reg, multiply, exp_str)
-        """
+            lkey = []
+            lval = []
+            re.sub(reg, lambda m: m.lastgroup if lkey.append(getattr(self,m.lastgroup)) else m.lastgroup, mkey)
+            re.sub(reg, lambda m: m.lastgroup if lval.append(getattr(self,m.lastgroup)) else m.lastgroup, mval)
+            self.lexis_moduses.append((tuple(lkey),lval[0]))
+        pass # debug
 
     @staticmethod
     def recurse(obj,sdict,sclass):
         for (key,value) in sdict.items():
-            try:
-                attrs = value.pop('_attrs_')
-                if 'syntax_modus' in attrs:
-                    obj.syntax_moduses.append((key,attrs['syntax_modus'],attrs['pseudo']))
-            except KeyError:
-                attrs = {}
+            attrs = value.pop('_attrs_', {})
+            # if attrs.get('syntax_modus'):
+            #    obj.syntax_moduses.append((key,attrs['syntax_modus'],attrs['pseudo']))
             setattr(obj, key, type(key, (sclass,), attrs))
+            obj.syntax_moduses.append(getattr(obj,key))
             if value:
                 Syn.recurse(obj, value, getattr(obj,key))
-        return
 
 s = Syn(SyntaxDict,LexisModus)
-print(s)
-m = s.Mult('*')
+
+# print(s.__dict__)
+print([cl for cl in dir(s) if getattr(getattr(s,cl),'pseudo','')=='Int'])
+# print(dir(s.Mult('*')))
 pass
