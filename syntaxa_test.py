@@ -3,9 +3,9 @@
 from syntaxa import *
 from teredo import *
 
-s = Syntaxa()
+lang = Syntaxa()
 exp_str = '((A-X)*12)**(B/(C-7))+(Q*12+19+C)'
-synt_root = s.exec_state(exp_str)
+synt_root = lang.exec_state(exp_str)
 
 print([cl for cl in dir(s) if getattr(getattr(s,cl),'pseudo','')=='Int'])
 
@@ -31,7 +31,7 @@ print(t.get_pattern(wrapper_element=lambda x: '\t'*x.floor + x.obj.value + '\n',
                                     wrapper_close=lambda x: '',
                                     filterer=lambda x:True))
 
-print(t.get_pattern(wrapper_element=lambda x: x.obj.pseudo,
+print(t.get_pattern(wrapper_element=lambda x: x.obj.value,
                     wrapper_open=lambda x: '(' if x.isnode else '',
                     wrapper_between=lambda x: '',
                     wrapper_close=lambda x: ')' if x.isnode else  '',

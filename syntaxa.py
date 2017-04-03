@@ -4,13 +4,18 @@ from functools import reduce
 from itertools import zip_longest
 import re
 
+# Operations:
 dict_Degree=dict(_attrs_=dict(syntax_modus=r'\*{2}', pseudo='**', prior=3))
 dict_Div=dict(_attrs_=dict(syntax_modus=r'\/', pseudo='/', prior=2))
 dict_Mult=dict(_attrs_=dict(syntax_modus=r'\*(?!\*)', pseudo='*', prior=2))
 dict_Sub=dict(_attrs_=dict(syntax_modus=r'\-', pseudo='-', prior=1))
 dict_Add=dict(_attrs_=dict(syntax_modus=r'\+', pseudo='+', prior=1))
+
+# SpecSymbols:
 dict_QuoteRight=dict(_attrs_=dict(syntax_modus=r'\)', pseudo=')'))
 dict_QuoteLeft=dict(_attrs_=dict(syntax_modus=r'\(', pseudo='(' ))
+
+# Expressions:
 dict_Variable=dict(_attrs_=dict(syntax_modus=r'[a-zA-Z]+(?:\d|\w)*', pseudo='<Var>'))
 dict_IntNumber=dict(_attrs_=dict(syntax_modus=r'\d+(?![\.])', pseudo='<Int>'))
 dict_FloatNumber=dict(_attrs_=dict(syntax_modus=r'\d+\.\d*', pseudo='<Flo>'))
@@ -19,16 +24,17 @@ dict_String=dict(_attrs_=dict(syntax_modus=r'(?:".*")|(?:\'.*\')', pseudo='<Str>
 SyntaxDict = dict(Operation=dict(_attrs_=dict(pseudo='<Opr>'),
                                    OperInfix=dict(_attrs_=dict(pseudo='<Infix>'), Degree=dict_Degree, Div=dict_Div, Mult=dict_Mult, Sub=dict_Sub, Add=dict_Add)
                                  ),
-                  QuoteRight=dict_QuoteRight,
-                  QuoteLeft=dict_QuoteLeft,
-                  SequanceInfix=dict(_attrs_=dict(pseudo='<SIn>')),
+                  SpecSymbol=dict(_attrs_=dict(pseudo='<SSym>'),
+                               QuoteRight=dict_QuoteRight,
+                               QuoteLeft=dict_QuoteLeft),
                   Expression=dict(_attrs_=dict(pseudo='<Exp>'),
                                   Variable=dict_Variable,
                                   String=dict_String,
                                   Number=dict(_attrs_=dict(pseudo='<Num>'),
                                               IntNumber=dict_IntNumber,
                                               FloatNumber=dict_FloatNumber),
-                                  )
+                                  ),
+                  SequanceInfix = dict(_attrs_=dict(pseudo='<SIn>'))
                   )
 
 
@@ -87,17 +93,7 @@ class Syntaxa():
                     return ''
         if re.sub(self.syn_reg, repl, statement):
             raise RuntimeError("Syntax error")
-
-        def hand_lexis(modus,lexis):
-            modus_target = modus[1](modus[1].__name__)
-            if ''.join([cl.pseudo for cl in modus[0]]) != '<SIn><Infix><Exp>':
-                modus_target.childs = lexis[:len(modus[0])]
-            else:
-                modus_target.childs = lexis[0].childs + [lexis[1], lexis[2]]
-            lexis = [modus_target] + lexis[len(modus[0]):]
-            return lexis
-
-        def exec_modus(lexis, depth=0):
+        def exec_modus(obj,lexis, depth=0):
             while len(lexis) > 1:  # проход по всем лексемам
                 second_break = False
                 modus_found = False
@@ -108,17 +104,23 @@ class Syntaxa():
                         ipos = [isinstance(*t) for t in
                                 zip_longest(lexis[:len(modus[0])], modus[0], fillvalue=object)].index(False)
                     except ValueError:  # модус совпал полностью
-                        # modus_target = modus[1](modus[1].__name__)
-                        # modus_target.childs = lexis[:len(modus[0])]
-                        # lexis = [modus_target] + lexis[len(modus[0]):]
-                        lexis = hand_lexis(modus,lexis)
+                        modus_target = modus[1](modus[1].__name__)
+                        modus_target.childs = []
+                        for m, l in zip(modus[0], lexis):
+                            if isinstance(l,obj.SequanceInfix):
+                                modus_target.childs.extend(l.childs)
+                            elif isinstance(l,obj.SpecSymbol):
+                                continue
+                            else:
+                                modus_target.childs.append(l)
+                        lexis = [modus_target] + lexis[len(modus[0]):]
                         modus_found = True
                         if depth:
                             return lexis
                         else:
                             break
                     for i in range(ipos, 0, -1):
-                        lst = exec_modus(lexis[i:], depth=depth + 1) # РЕКУРСИЯ
+                        lst = exec_modus(obj, lexis[i:], depth=depth + 1) # РЕКУРСИЯ
                         if lst.__class__.__name__ == 'list':
                             lexis = lexis[:i] + lst
                             if len(lexis) == 1:  # lexis отсканирован весь
@@ -129,8 +131,7 @@ class Syntaxa():
                     if second_break:
                         break
                 if not modus_found:
-                    # return None
                     return (lexis, modus)
             return lexis
-        self.syntax_tree = exec_modus(state_list)
+        self.syntax_tree = exec_modus(self,state_list)
         return self.syntax_tree
