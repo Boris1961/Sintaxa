@@ -4,10 +4,13 @@ from syntaxa import *
 from teredo import *
 
 lang = Syntaxa()
-exp_str = '((A-X)*12)**(B/(C-7))+(Q*12+19+C)'
+exp_str = 'func(A-X)*12**17/puk(C-7)'
+# exp_str = '((A-X)*12)**(17/(C-7))+(Q*12+(19*y)*8**9+C)'
+# exp_str = '1+B(17+C)+119'
+# exp_str = '1+B(17+5)'
 synt_root = lang.exec_state(exp_str)
 
-print([cl for cl in dir(s) if getattr(getattr(s,cl),'pseudo','')=='Int'])
+print([cl for cl in dir(lang) if getattr(getattr(lang, cl), 'pseudo', '') == 'Int'])
 
 class Synt_Tree(object):
     def __init__(self, root_script):
@@ -39,3 +42,4 @@ print(t.get_pattern(wrapper_element=lambda x: x.obj.value,
 
 # Expression(Expression((Expression(Expression((Expression(A-X)))*12)))**Expression((Expression(B/Expression((Expression(C-7)))))))
 # <SIn>(<Exp>((<SIn>(<Exp>((<SIn>(<Var>-<Var>)))*<Int>)))**<Exp>((<SIn>(<Var>/<Exp>((<SIn>(<Var>-<Int>))))))+<Exp>((<SIn>(<Var>*<Int>+<Int>+<Var>))))
+
