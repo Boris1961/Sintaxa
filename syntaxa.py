@@ -142,7 +142,7 @@ class Syntaxa():
                             try:
                                 s = src.pop(list(map(type, src)).index(item))
                             except ValueError:
-                                s = item(item.__name__)
+                                s = item(item.pseudo)
                             dst.append(s)
                         lexis = dst + lexis[ipos:]
                         if depth and match_pattern(pattern, lexis):
