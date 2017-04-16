@@ -15,6 +15,7 @@ dict_Call = dict(_attrs_=dict(syntax_modus=r'\#', pseudo='#', prior=4))
 # SpecSymbols:
 dict_QuoteLeft = dict(_attrs_=dict(syntax_modus=r'\(', pseudo='(', prior=5))
 dict_QuoteRight = dict(_attrs_=dict(syntax_modus=r'\)', pseudo=')', prior=0))
+dict_Comma = dict(_attrs_=dict(syntax_modus=r'\,', pseudo=',', prior=0))
 
 # Expressions:
 dict_Variable = dict(_attrs_=dict(syntax_modus=r'[a-zA-Z]+(?:\d|\w)*', pseudo='<Var>'))
@@ -29,23 +30,35 @@ SyntaxDict = dict(Operation=dict(_attrs_=dict(pseudo='<Opr>'),
                                  ),
                   SpecSymbol=dict(_attrs_=dict(pseudo='<SPEC>'),
                                   QuoteRight=dict_QuoteRight,
-                                  QuoteLeft=dict_QuoteLeft),
+                                  QuoteLeft=dict_QuoteLeft,
+                                  Comma=dict_Comma),
                   Value=dict(_attrs_=dict(pseudo='<Val>'),
                              Variable=dict_Variable,
                              String=dict_String,
                              Number=dict(_attrs_=dict(pseudo='<Num>'),
                                          IntNumber=dict_IntNumber,
                                          FloatNumber=dict_FloatNumber),
-                             Capsule=dict(_attrs_=dict(pseudo='<Caps>')),
-                             Sequance=dict(_attrs_=dict(pseudo='<SEQ>'))
+                             Capsule=dict(_attrs_=dict(pseudo='<Cap>')),
+                             Tuple=dict(_attrs_=dict(pseudo='<Tup>')),
+                             Sequance=dict(_attrs_=dict(pseudo='<Seq>'))
                              )
                   )
 
-LexisModus = [dict(prototype='<Val><Infix><Val>', sub='<Val>', prior=1),
-              # тут prior = индекс приоритетного элемента в прототипе
+LexisModus1 = [dict(prototype='<Val><Infix><Val>', sub='<Val>', prior=1),
               dict(prototype='(<Val>)', sub='<Val>', repl_only=True),
               dict(prototype='<Var>(', sub='<Var>#(')
               ]
+
+# тут prior = индекс приоритетного элемента в прототипе
+LexisModus = [dict(prototype='<Val><Infix><Val>', sub='<Val>', prior=1),
+              dict(prototype='(<Val>)', sub='<Val>', repl_only=True),
+              dict(prototype='<Var>(<Seq>)', sub='<Val>'),
+              dict(prototype='<Var>(<Val>)', sub='<Var>#<Val>'),
+              dict(prototype='<Val>,<Val>', sub='<Seq>'),
+              dict(prototype='<Seq>,<Val>', sub='<Seq>')
+              ]
+
+#              dict(prototype='(<Seq>)', sub='<Tup>')
 
 
 class Modus():
@@ -67,7 +80,6 @@ class Syntaxa():
     def __init__(self, syntax_dict=SyntaxDict, lexis_moduses=LexisModus):
         class SyntaxClass(object):
             pseudo = 'SynCl'
-
             def __init__(self, value):
                 self.name = self.__class__.__name__
                 self.value = value
@@ -92,7 +104,8 @@ class Syntaxa():
             if value:
                 Syntaxa.recurse(obj, value, getattr(obj, key))
 
-    def exec_state(self, expression):
+    def compile_exp(self, expression):
+
         def repl(m):
             for cl in self.syntax_list:
                 if cl.__name__ == m.lastgroup:
@@ -115,27 +128,48 @@ class Syntaxa():
 
         def match_pattern(pattern, lexis):
             return reduce(lambda x, y: x & y, [type(t[0]) == t[1] for t in zip(lexis, pattern)])
+            # return reduce(lambda x, y: x & y, [isinstance(t[0], t[1]) for t in zip(lexis, pattern)])
 
-        def parse_modus(obj, lexis, depth=0, pattern=None):
+        def DECOR(f):
+            def WRAP(*args, **kwargs):
+                print('\n ДО : ', ''.join([m.value for m in args[1]]), ' dep = ', kwargs['depth'] if kwargs.get('depth') else 0)
+                ret = f(*args, **kwargs)
+                print('ПОСЛЕ : ', ''.join([m.value for m in ret]), ' dep = ', kwargs['depth'] if kwargs.get('depth') else 0, '\n')
+                return ret
+            return WRAP
 
-            while len(lexis) > 1:  # проход по всем лексемам
+        @DECOR
+        def parse_modus(self, lexis, depth=0, pattern=None):
+            """
+            Парсинг списка лексем lexis на предмет соответствия к-либо правилу из списка правил,
+            преобразование lexis по найденному правилу и возврат результата
+            :param lexis: список лексем-экземляров класса SyntaxClass, который будем парсить
+            :param depth: уровень (глубина) парсинга
+            :param pattern: искомый список классов, на соответсвие списку lexis : isinstance(lexis(i),pattern(i)==True)
+            :return: преобразованный список lexis по подходящему правилу modus
+            """
+
+            while len(lexis) > 1:  # проход по списку лексем
 
                 # print(''.join(['<' + m.name + '>' for m in lexis]), ' : ', ''.join([m.value for m in lexis]), ' dep = ', depth)
-                self.last_pos = len(''.join([m.value for m in lexis]))
+                self.last_pos = len(''.join([m.value for m in lexis])) # отрицательный индекс в исходной строке expression первого символа lexis (для обработки ошибки)
 
-                match = sorted([(modus, match_modus(modus, lexis)) for modus in obj.lexis_moduses],
-                               key=lambda x: x[1], reverse=True)
-                match_full = [item for item in match if item[0].prototype.__len__() == item[1]]
+                match = sorted([(modus, match_modus(modus, lexis)) for modus in self.lexis_moduses],
+                               key=lambda x: x[1], reverse=True) # список результатов сравнения всех прототипов с lexis
+                match_full = [item for item in match if item[0].prototype.__len__() == item[1]] # подсписок match полностью совпавших протопитов
 
                 if match_full.__len__() > 1:
                     raise SyntaxaError("Unexpect modus")  # найдены более одного совпавшего прототипа
 
                 elif match_full.__len__() == 1:  # найден ровно один совпавший прототип
                     modus, ipos = match_full[0]
+
                     if proc_prior(lexis, modus):  # след.элемент более приоритетный?
-                        lexis = lexis[:ipos - 1] + parse_modus(obj, lexis[ipos - 1:], depth=depth + 1,
-                                                               pattern=modus.prototype[ipos - 1:])  # РЕКУРСИЯ: обработка более высокого приоритета
+                        lexis = lexis[:ipos-1] + parse_modus(self, lexis[ipos-1:], depth=depth+1,
+                                                               pattern=modus.prototype[ipos - 1:])  # рекурсия: обработка более высокого приоритета
+
                     if modus.sub.__len__() > 1 or modus.repl_only:
+                        """ ТОЛЬКО замена прототипа по модусу без создания новых лексем """
                         src = lexis[:ipos]
                         dst = []
                         for item in list(modus.sub):
@@ -151,10 +185,11 @@ class Syntaxa():
                             continue
 
                     else:
+                        # создание новой лексемы-заместителя прототипа
                         sub = modus.sub[0]
                         target = sub(sub.__name__)
                         target.childs = lexis[:ipos]
-                        target.childs = [item for item in lexis[:ipos] if not isinstance(item, obj.SpecSymbol)]
+                        target.childs = [item for item in lexis[:ipos] if not isinstance(item, self.SpecSymbol)]
                         lexis = [target] + lexis[ipos:]
 
                     if depth and match_pattern(pattern, lexis):
@@ -163,14 +198,14 @@ class Syntaxa():
                         continue
 
                 else:  # найдено только частичное совпадение
-                    match = [item for item in match if item[1] > 0]
+                    match = [item for item in match if item[1] > 0] # список частично совпавших модусов
                     if len(match) == 0:
                         return []
                     modus_found = False
-                    for item in match:
+                    for item in match: # поиск вложенных прототипов
                         modus, ipos = item
                         for i in range(ipos, 0, -1):
-                            lst = parse_modus(obj, lexis[i:], depth=depth + 1, pattern=modus.prototype[i:])
+                            lst = parse_modus(self, lexis[i:], depth=depth+1, pattern=modus.prototype[i:])
                             if not lst:
                                 continue
                             lexis = lexis[:i] + lst
@@ -181,6 +216,7 @@ class Syntaxa():
                                 break
                         if modus_found:
                             break
+                        pass
                     if not modus_found:
                         return []
 
@@ -190,7 +226,7 @@ class Syntaxa():
         if re.sub(self.syn_reg, repl, expression):
             raise RuntimeError("Syntax error")
         self.syntax_tree = parse_modus(self, expression_list, pattern=(self.Value,))
-        if not self.syntax_tree:
+        if not self.syntax_tree: # если парсер вернул ошибку
             print('Syntax error:\n', expression, '\n', ' '*(len(expression)-self.last_pos) + '^' + ' '*self.last_pos)
             exit()
         #    print(''.join([m.value for m in expression_list])) # debug
