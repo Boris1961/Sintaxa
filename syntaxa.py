@@ -1,23 +1,25 @@
 # coding=utf-8
 
+DEBUG = False
+
 from functools import reduce
 from itertools import takewhile
 import re
 import inspect
 
 # Operations:
-dict_Degree = dict(_attrs_=dict(syntax_modus=r'\*{2}', pseudo='**', prior=3))
-dict_Div = dict(_attrs_=dict(syntax_modus=r'\/', pseudo='/', prior=2))
-dict_Mult = dict(_attrs_=dict(syntax_modus=r'\*(?!\*)', pseudo='*', prior=2))
-dict_Sub = dict(_attrs_=dict(syntax_modus=r'\-', pseudo='-', prior=1))
-dict_Add = dict(_attrs_=dict(syntax_modus=r'\+', pseudo='+', prior=1))
+dict_Degree = dict(_attrs_=dict(syntax_modus=r'\*{2}', pseudo='**', prior=4))
+dict_Div = dict(_attrs_=dict(syntax_modus=r'\/', pseudo='/', prior=3))
+dict_Mult = dict(_attrs_=dict(syntax_modus=r'\*(?!\*)', pseudo='*', prior=3))
+dict_Sub = dict(_attrs_=dict(syntax_modus=r'\-', pseudo='-', prior=2))
+dict_Add = dict(_attrs_=dict(syntax_modus=r'\+', pseudo='+', prior=2))
 
-dict_Call = dict(_attrs_=dict(syntax_modus=r'\#', pseudo='#', prior=4))
+dict_Call = dict(_attrs_=dict(syntax_modus=r'\#', pseudo='#', prior=5))
 
 # SpecSymbols:
-dict_QuoteLeft = dict(_attrs_=dict(syntax_modus=r'\(', pseudo='(', prior=5))
-dict_QuoteRight = dict(_attrs_=dict(syntax_modus=r'\)', pseudo=')', prior=0))
-dict_Comma = dict(_attrs_=dict(syntax_modus=r'\,', pseudo=',', prior=0))
+dict_QuoteLeft = dict(_attrs_=dict(syntax_modus=r'\(', pseudo='(', prior=6))
+dict_QuoteRight = dict(_attrs_=dict(syntax_modus=r'\)', pseudo=')', prior=1))
+dict_Comma = dict(_attrs_=dict(syntax_modus=r'\,', pseudo=',', prior=1))
 
 # Expressions:
 dict_Variable = dict(_attrs_=dict(syntax_modus=r'[a-zA-Z]+(?:\d|\w)*', pseudo='<Var>'))
@@ -25,15 +27,16 @@ dict_IntNumber = dict(_attrs_=dict(syntax_modus=r'\d+(?![\.])', pseudo='<Int>'))
 dict_FloatNumber = dict(_attrs_=dict(syntax_modus=r'\d+\.\d*', pseudo='<Flo>'))
 dict_String = dict(_attrs_=dict(syntax_modus=r'(?:".*")|(?:\'.*\')', pseudo='<Str>'))
 
-SyntaxDict = dict(Operation=dict(_attrs_=dict(pseudo='<Opr>'),
-                                 OperInfix=dict(_attrs_=dict(pseudo='<Infix>'), Degree=dict_Degree, Div=dict_Div,
-                                                Mult=dict_Mult, Sub=dict_Sub, Add=dict_Add, Call=dict_Call
-                                                )
-                                 ),
+SyntaxDict = dict(Action=dict(_attrs_=dict(pseudo='<Opr>'),
+                              OperInfix=dict(_attrs_=dict(pseudo='<Infix>'), Degree=dict_Degree, Div=dict_Div,
+                              Mult=dict_Mult, Sub=dict_Sub, Add=dict_Add, Call=dict_Call
+                                             )
+                              ),
                   SpecSymbol=dict(_attrs_=dict(pseudo='<SPEC>'),
                                   QuoteRight=dict_QuoteRight,
                                   QuoteLeft=dict_QuoteLeft,
                                   Comma=dict_Comma),
+                  Sequance=dict(_attrs_=dict(pseudo='<Seq>')),
                   Value=dict(_attrs_=dict(pseudo='<Val>'),
                              Variable=dict_Variable,
                              String=dict_String,
@@ -41,25 +44,22 @@ SyntaxDict = dict(Operation=dict(_attrs_=dict(pseudo='<Opr>'),
                                          IntNumber=dict_IntNumber,
                                          FloatNumber=dict_FloatNumber),
                              Capsule=dict(_attrs_=dict(pseudo='<Cap>')),
-                             Sequance=dict(_attrs_=dict(pseudo='<Seq>')),
                              Tuple=dict(_attrs_=dict(pseudo='<Tup>'))
                              )
                   )
 
 LexisModus1 = [dict(prototype='<Val><Infix><Val>', sub='<Val>', prior=1),
-              dict(prototype='(<Val>)', sub='<Val>', repl_only=True),
+              dict(prototype='(<Val>)', sub='<Val>', inherit=True),
               dict(prototype='<Var>(', sub='<Var>#(')
               ]
 
 # тут prior = индекс приоритетного элемента в прототипе
 LexisModus = [dict(prototype='<Val><Infix><Val>', sub='<Val>', prior=1),
-              dict(prototype='(<Val>)', sub='<Val>', repl_only=True),
+              dict(prototype='(<Val>)', sub='<Val>', inherit=True),
               dict(prototype='<Var>(', sub='<Var>#('),
-              # dict(prototype='<Var>(<Val>)', sub='<Var>#<Val>'),
-              # dict(prototype='(<Seq>)', sub='<Tup>'),
-              # dict(prototype='<Var><Tup>', sub='<Var>#<Tup>'),
-              dict(prototype='<Val>,<Val>', sub='<Seq>'),
-              dict(prototype='<Seq>,<Val>', sub='<Seq>', repl_only=True)
+              dict(prototype='(<Seq>)', sub='<Val>'),
+              dict(prototype='<Val>,<Val>', sub='<Seq>', prior=1),
+              dict(prototype='<Seq>,<Val>', sub='<Seq>', prior=1, inherit=True)
               ]
 
 
@@ -78,7 +78,6 @@ class SyntaxaError(Exception):
         self.lexis = lexis
 
 class Syntaxa():
-
     def __init__(self, syntax_dict=SyntaxDict, lexis_moduses=LexisModus):
         class SyntaxClass(object):
             pseudo = 'SynCl'
@@ -108,13 +107,14 @@ class Syntaxa():
 
     def compile_exp(self, expression):
 
-        def repl(m):
-            for cl in self.syntax_list:
-                if cl.__name__ == m.lastgroup:
-                    expression_list.append(cl(m.group()))
-                    return ''
-
-        def proc_prior(lexis, modus):
+        def test_prior(lexis, modus):
+            """
+            Тестируем приоритеты модуса и списка лексем
+            :param lexis: список лексем
+            :param modus: найденное правило modus
+            :return: True, если следующая в списке сканирования лексема более приоритетна, чем операция найденного лексического отрезка
+                     иначе - False
+            """
             ipos = len(modus.prototype)
             if not modus.prior or len(lexis) == ipos:
                 return False
@@ -126,11 +126,22 @@ class Syntaxa():
                 return False
 
         def match_modus(modus, lexis):
-            # функция сравнивает прототип модуса с lexis, и возвращает длину совпавшего интервала (от начала списка)
+            """
+            Функция тестирует на instance список lexis с прототипом модуса modus
+            :param modus: искомое правило вывода
+            :param lexis: список лексем
+            :return: длина совпавшего интервала (от начала списка)
+            """
             return len(list(takewhile(lambda x: isinstance(*x), zip(lexis, modus.prototype))))
 
 
         def match_pattern(pattern, lexis):
+            """
+            Функция тестирует на type список lexis с pattern
+            :param pattern: список искомых классов
+            :param lexis: список лексем
+            :return: True, если списки полностью соттсветствуют по type, иначе False
+            """
             return reduce(lambda x, y: x & y, map(lambda x: type(x[0]) == x[1], zip(lexis, pattern)))
 
         def get_depth():
@@ -139,6 +150,8 @@ class Syntaxa():
             return list(filter(lambda x: x[3] == 'parse_modus', inspect.stack())).__len__() - 1
 
         def DECOR_DEBUG(f):
+            """ Отладочный декоратор
+            """
             def WRAP(*args, **kwargs):
                 depth = get_depth()+1
                 print('{tab} ({depth}) S: {new_lexis} P:{pattern}'.format(tab='\t'*depth, depth=depth,
@@ -147,7 +160,12 @@ class Syntaxa():
                 ret = f(*args, **kwargs)
                 print('{tab} ({depth}) F: {ret}'.format(tab='\t' * depth, depth=depth, ret=''.join([m.value for m in ret])))
                 return ret
-            return WRAP
+
+            if DEBUG:
+                return WRAP
+            else:
+                return lambda *args, **kwargs: f(*args, **kwargs)
+
 
         @DECOR_DEBUG
         def parse_modus(lexis, pattern=None):
@@ -177,46 +195,9 @@ class Syntaxa():
                 #    raise SyntaxaError("Unexpected modus")  # найдены более одного совпавшего прототипа
                 #elif match_full.__len__() == 1:  # найден ровно один совпавший прототип
 
-                if match_full.__len__() == 1:  # найден ровно один совпавший прототип
-                    modus, ipos = match_full[0]
+                # обнаружено только частичное совпадение с протопипом
 
-                    if proc_prior(lexis, modus):  # след.элемент более приоритетный?
-                        # рекурсия-обработка более высокого приоритета
-                        lst = parse_modus(lexis[ipos - 1:], pattern=modus.prototype[ipos - 1:])
-                        if not lst:
-                            print('НОЛЬ!!!')
-                        lexis = lexis[:ipos-1] + lst
-                                # parse_modus(lexis[ipos-1:], pattern=modus.prototype[ipos-1:])
-
-                    if modus.sub.__len__() > 1 or modus.repl_only:
-                        # ТОЛЬКО замена прототипа по модусу без создания новых лексем
-                        src = lexis[:ipos]
-                        dst = []
-                        for item in list(modus.sub):
-                            try:
-                                s = src.pop(list(map(type, src)).index(item))
-                            except ValueError:
-                                s = item(item.pseudo)
-                            dst.append(s)
-                        lexis = dst + lexis[ipos:]
-                        if depth and match_pattern(pattern, lexis):
-                            return lexis
-                        else:
-                            continue
-
-                    else:
-                        # создание новой лексемы-заместителя прототипа
-                        sub = modus.sub[0]
-                        target = sub(sub.__name__)
-                        target.childs = list(filter(lambda x: not isinstance(x,self.SpecSymbol), lexis[:ipos]))
-                        lexis = [target] + lexis[ipos:]
-
-                    if depth and match_pattern(pattern, lexis):
-                        return lexis
-                    else:
-                        continue
-
-                else:  # найдено только частичное совпадение
+                if not match_full:
                     modus_found = False
                     for item in match: # поиск вложенных прототипов
                         modus, ipos = item
@@ -234,8 +215,76 @@ class Syntaxa():
                             break
                     if not modus_found:
                         return []
+                    continue
+
+                # обнаружено полное совпадение с прототипом
+
+                modus, ipos = match_full[0]
+
+                if test_prior(lexis, modus):  # след.элемент более приоритетный?
+
+                    # рекурсия-обработка более высокого приоритета
+
+                    lst = parse_modus(lexis[ipos-1:], pattern=modus.prototype[ipos-1:])
+                    lexis = lexis[:ipos-1] + lst
+
+                if modus.sub.__len__() == 1:
+
+                    # создание новой лексемы-заместителя прототипа
+
+                    sub = modus.sub[0]
+                    target = sub(sub.__name__)
+                    target.childs = list(filter(lambda x: not isinstance(x,self.SpecSymbol), lexis[:ipos]))
+
+                    if modus.inherit:
+                        childs = []
+                        for child in target.childs:
+                            if getattr(child,'childs',None):
+                                childs.extend(child.childs)
+                            else:
+                                childs.append(child)
+                        target.childs = childs
+
+                    # elif target.childs.__len__() == 1 and target.name == 'Value'  :
+                    #    target = target.childs[0]
+
+                    lexis = [target] + lexis[ipos:]
+
+                else:
+
+                    # ТОЛЬКО замена прототипа по модусу без создания новых лексем
+
+                    src = lexis[:ipos]
+                    dst = []
+                    for item in list(modus.sub):
+                        try:
+                            s = src.pop(list(map(type, src)).index(item))
+                        except ValueError:
+                            s = item(item.pseudo)
+                        dst.append(s)
+                    lexis = dst + lexis[ipos:]
+                    if depth and match_pattern(pattern, lexis):
+                        return lexis
+                    else:
+                        continue
+
+                if depth and match_pattern(pattern, lexis):
+                    return lexis
+                else:
+                    continue
 
             return lexis
+
+        def repl(m):
+            """
+            Обработчик найденной лексемы в исходной строке выражения (для метода re.sub)
+            :param m: match-объект модуля re
+            :return:
+            """
+            for cl in self.syntax_list:
+                if cl.__name__ == m.lastgroup:
+                    expression_list.append(cl(m.group()))
+                    return ''
 
         expression_list = []
         if re.sub(self.syn_reg, repl, expression):

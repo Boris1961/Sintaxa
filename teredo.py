@@ -62,6 +62,7 @@ class TeredoTree(object):
 
 
     """
+
     def __init__(self, root_script, class_handler):
         def walk(parent):
             # рекурсивно проходим по дереву и генерим все его элементы
