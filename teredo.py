@@ -1,3 +1,5 @@
+# coding=utf-8
+
 import os
 class Tree_OS(object):
     def __init__(self, root_script):
@@ -36,9 +38,35 @@ class Tree_HTML(object):
     def _childs(self, parent=None):
         list_of_childs = list(parent.tag) if parent else [self._root]
         return [{'name': element.name if element.name else '<Text>',
-                 'isnode': element.name is not None ,
+                 'isnode': element.name != None ,
                  'tag': element}
                 for element in list_of_childs]
+
+class Tree_PY_OBJ(object):
+    def __init__(self, root_script):
+        self._root = root_script
+    def _str(self):
+        return self.name
+    def _childs(self, parent=None):
+        def iterable(x):
+            try:
+                iter(x)
+                return True
+            except:
+                return False
+        if parent is None:
+            list_of_childs = [self._root]
+        elif parent.name == 'dict':
+            list_of_childs = parent.content.items()
+        elif parent.name != 'str':
+            list_of_childs = list(parent.content)
+        else:
+            list_of_childs = []
+        return [{'name': item.__class__.__name__,
+                 'content': item,
+                 'isnode': iterable(item)}
+                for item in list_of_childs]
+
 
 class Tree_EXPRESSION(object):
     pass
@@ -62,7 +90,6 @@ class TeredoTree(object):
 
 
     """
-
     def __init__(self, root_script, class_handler):
         def walk(parent):
             # рекурсивно проходим по дереву и генерим все его элементы
@@ -255,6 +282,8 @@ class Teredo(TeredoElement):
             self.tree = TeredoTree(descriptor, Tree_HTML)
         elif forester.lower() == 'os':
             self.tree = TeredoTree(descriptor, Tree_OS)
+        elif forester.lower() == 'py.obj':
+            self.tree = TeredoTree(descriptor, Tree_PY_OBJ)
 
         self.root = self.tree.root
         self.root.ancestor = self

@@ -23,7 +23,7 @@ sintax_modus = [
 
 reg = reduce(lambda a,b: a+'|'+b, [(r'(?P<%s>%s)' % (x[0],x[1])) for x in sintax_modus ])
 
-# exp_str = '(23+19)*dsds**8-89'
+# expression = '(23+19)*dsds**8-89'
 
 class Lexema(object):
     def __init__(self, match):

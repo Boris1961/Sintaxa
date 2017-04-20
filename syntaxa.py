@@ -7,13 +7,13 @@ from itertools import takewhile
 import re
 import inspect
 
+# Набор базовых лексем языка:
 # Operations:
 dict_Degree = dict(_attrs_=dict(syntax_modus=r'\*{2}', pseudo='**', prior=4))
 dict_Div = dict(_attrs_=dict(syntax_modus=r'\/', pseudo='/', prior=3))
 dict_Mult = dict(_attrs_=dict(syntax_modus=r'\*(?!\*)', pseudo='*', prior=3))
 dict_Sub = dict(_attrs_=dict(syntax_modus=r'\-', pseudo='-', prior=2))
 dict_Add = dict(_attrs_=dict(syntax_modus=r'\+', pseudo='+', prior=2))
-
 dict_Call = dict(_attrs_=dict(syntax_modus=r'\#', pseudo='#', prior=5))
 
 # SpecSymbols:
@@ -26,6 +26,10 @@ dict_Variable = dict(_attrs_=dict(syntax_modus=r'[a-zA-Z]+(?:\d|\w)*', pseudo='<
 dict_IntNumber = dict(_attrs_=dict(syntax_modus=r'\d+(?![\.])', pseudo='<Int>'))
 dict_FloatNumber = dict(_attrs_=dict(syntax_modus=r'\d+\.\d*', pseudo='<Flo>'))
 dict_String = dict(_attrs_=dict(syntax_modus=r'(?:".*")|(?:\'.*\')', pseudo='<Str>'))
+
+# Родословное лексическое дерево (дерево словарей). Части речи и их зависимости
+# будут преобразованы парсером в дерево классов с наследованием
+# в соответствии с этими зависимостями
 
 SyntaxDict = dict(Action=dict(_attrs_=dict(pseudo='<Opr>'),
                               OperInfix=dict(_attrs_=dict(pseudo='<Infix>'), Degree=dict_Degree, Div=dict_Div,
@@ -53,8 +57,9 @@ LexisModus1 = [dict(prototype='<Val><Infix><Val>', sub='<Val>', prior=1),
               dict(prototype='<Var>(', sub='<Var>#(')
               ]
 
-# тут prior = индекс приоритетного элемента в прототипе
-LexisModus = [dict(prototype='<Val><Infix><Val>', sub='<Val>', prior=1),
+# Список грамматических спецификаций языка(правил вывода, модусов)
+
+LexisModus = [dict(prototype='<Val><Infix><Val>', sub='<Val>', prior=1), # prior = индекс приоритетного элемента в прототипе
               dict(prototype='(<Val>)', sub='<Val>', inherit=True),
               dict(prototype='<Var>(', sub='<Var>#('),
               dict(prototype='(<Seq>)', sub='<Val>'),
@@ -64,6 +69,8 @@ LexisModus = [dict(prototype='<Val><Infix><Val>', sub='<Val>', prior=1),
 
 
 class Modus():
+    """ Класс модусов, грамматических правил вывода
+    """
     def __init__(self, obj, kwargs):
         for key in kwargs:
             if key in ('prototype', 'sub'):
@@ -78,7 +85,13 @@ class SyntaxaError(Exception):
         self.lexis = lexis
 
 class Syntaxa():
+    """ Класс создает объект: язык с заданными деревом лексем и грамматическим списком
+    """
     def __init__(self, syntax_dict=SyntaxDict, lexis_moduses=LexisModus):
+        """
+        :param syntax_dict: словарь - дерево лексем языка
+        :param lexis_moduses: список грамматических правил (модусов)
+        """
         class SyntaxClass(object):
             pseudo = 'SynCl'
             def __init__(self, value):
@@ -106,6 +119,11 @@ class Syntaxa():
         self.lexis_moduses = list(map(lambda x: Modus(self,x), lexis_moduses))
 
     def compile_exp(self, expression):
+        """
+        Метод парсит заданное параметром выражение.
+        :param expression: выражение (строка)
+        :return: абстактное синтаксическое дерево
+        """
 
         def test_prior(lexis, modus):
             """
